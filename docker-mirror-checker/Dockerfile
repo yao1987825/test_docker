@@ -13,6 +13,5 @@ COPY templates/ templates/
 # 暴露端口
 EXPOSE 5000
 
-# 运行应用
-CMD ["python", "app.py"]
-
+# 运行应用（使用 uvicorn 启动 FastAPI）
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]

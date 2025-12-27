@@ -5,8 +5,11 @@
 Docker 镜像加速器测试 Web 应用
 """
 
-from flask import Flask, render_template, jsonify, request
-from flask_cors import CORS
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 import urllib.request
 import urllib.error
 import json
@@ -19,9 +22,22 @@ from typing import Dict, List, Tuple, Optional
 import redis
 import pymysql
 from pymysql.cursors import DictCursor
+import asyncio
+from contextlib import asynccontextmanager
 
-app = Flask(__name__)
-CORS(app)
+app = FastAPI(title="Docker Mirror Checker")
+
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 模板配置
+templates = Jinja2Templates(directory="templates")
 
 # 数据库和 Redis 配置
 MYSQL_CONFIG = {
@@ -53,6 +69,49 @@ MIRRORS_CONFIG_FILE = os.getenv('MIRRORS_CONFIG_FILE', '/app/mirrors.json')
 redis_pool = None
 redis_client = None
 
+# 测试结果缓存
+test_results_cache: Dict = {
+    "results": [],
+    "total": 0,
+    "available": 0,
+    "unavailable": 0,
+    "last_update": None,
+    "next_update": None
+}
+
+# 定时任务锁，防止并发测试
+test_lock = threading.Lock()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时初始化
+    global redis_pool, redis_client
+    
+    # 初始化 Redis
+    print("初始化 Redis 连接...")
+    init_redis()
+    
+    # 尝试从 Redis 加载缓存
+    cached_data = get_from_redis()
+    if cached_data:
+        test_results_cache.update(cached_data)
+        print("从 Redis 加载缓存数据成功")
+    
+    # 启动定时测试任务
+    print("启动定时检测任务（每1小时检测一次）...")
+    start_scheduled_test()
+    
+    yield
+    
+    # 关闭时清理
+    if redis_pool:
+        redis_pool.disconnect()
+
+
+app.router.lifespan_context = lifespan
+
+
 # 初始化 Redis
 def init_redis():
     global redis_pool, redis_client
@@ -65,6 +124,7 @@ def init_redis():
         print(f"Redis 连接失败: {e}")
         redis_client = None
 
+
 # 获取 MySQL 连接
 def get_mysql_connection():
     try:
@@ -72,6 +132,7 @@ def get_mysql_connection():
     except Exception as e:
         print(f"MySQL 连接失败: {e}")
         return None
+
 
 # 默认镜像站列表（当配置文件不存在时使用）
 FALLBACK_MIRRORS = [
@@ -124,19 +185,6 @@ def load_mirrors_from_config() -> List[str]:
 
 # 加载镜像源列表
 DEFAULT_MIRRORS = load_mirrors_from_config()
-
-# 测试结果缓存
-test_results_cache: Dict = {
-    "results": [],
-    "total": 0,
-    "available": 0,
-    "unavailable": 0,
-    "last_update": None,
-    "next_update": None
-}
-
-# 定时任务锁，防止并发测试
-test_lock = threading.Lock()
 
 
 def test_mirror(mirror: str, timeout: int = 5) -> Tuple[bool, str, int]:
@@ -503,46 +551,46 @@ def start_scheduled_test():
     scheduled_test()
 
 
-@app.route('/')
-def index():
+# FastAPI 路由
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
     """主页"""
-    return render_template('index.html')
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.route('/api/mirrors', methods=['GET'])
-def get_mirrors():
+@app.get("/api/mirrors")
+async def get_mirrors(mirrors: str = None):
     """获取镜像站列表"""
-    mirrors = request.args.get('mirrors')
     if mirrors:
         try:
             mirror_list = json.loads(mirrors)
-            return jsonify({"mirrors": mirror_list})
+            return {"mirrors": mirror_list}
         except:
             pass
-    return jsonify({"mirrors": DEFAULT_MIRRORS})
+    return {"mirrors": DEFAULT_MIRRORS}
 
 
-@app.route('/api/test', methods=['POST'])
-def test_single():
+@app.post("/api/test")
+async def test_single(request: Request):
     """测试单个镜像站"""
-    data = request.get_json()
+    data = await request.json()
     mirror = data.get('mirror')
     
     if not mirror:
-        return jsonify({"error": "缺少 mirror 参数"}), 400
+        raise HTTPException(status_code=400, detail="缺少 mirror 参数")
     
     result = test_mirror_detailed(mirror)
-    return jsonify(result)
+    return result
 
 
-@app.route('/api/test/all', methods=['POST'])
-def test_all():
+@app.post("/api/test/all")
+async def test_all(request: Request):
     """测试所有镜像站（实时测试）"""
-    data = request.get_json()
+    data = await request.json()
     mirrors = data.get('mirrors', DEFAULT_MIRRORS)
     
     if not isinstance(mirrors, list):
-        return jsonify({"error": "mirrors 必须是列表"}), 400
+        raise HTTPException(status_code=400, detail="mirrors 必须是列表")
     
     results = []
     
@@ -564,28 +612,28 @@ def test_all():
     # 按可用性排序：可用的在前
     results.sort(key=lambda x: (not x['available'], x['response_time']))
     
-    return jsonify({
+    return {
         "results": results,
         "total": len(results),
         "available": sum(1 for r in results if r['available']),
         "unavailable": sum(1 for r in results if not r['available'])
-    })
+    }
 
 
-@app.route('/api/test/cached', methods=['GET'])
-def get_cached_results():
+@app.get("/api/test/cached")
+async def get_cached_results():
     """获取缓存的测试结果（优先从 Redis，其次内存缓存）"""
     # 先尝试从 Redis 获取
     redis_data = get_from_redis()
     if redis_data:
-        return jsonify(redis_data)
+        return redis_data
     
     # 如果 Redis 没有，使用内存缓存
-    return jsonify(test_results_cache)
+    return test_results_cache
 
 
-@app.route('/api/config/recommended', methods=['GET'])
-def get_recommended_config():
+@app.get("/api/config/recommended")
+async def get_recommended_config():
     """获取推荐的 Docker 配置（基于最新的检测结果，优先从 Redis）"""
     # 先尝试从 Redis 获取
     redis_data = get_from_redis()
@@ -600,19 +648,19 @@ def get_recommended_config():
         next_update = test_results_cache.get("next_update")
     
     if not results:
-        return jsonify({
+        return {
             "error": "暂无检测数据",
             "config": None
-        })
+        }
     
     # 筛选可用的镜像源
     available = [r for r in results if r.get('available', False)]
     
     if not available:
-        return jsonify({
+        return {
             "error": "暂无可用的镜像源",
             "config": None
-        })
+        }
     
     # 按响应时间排序，选择最快的 5 个
     sorted_available = sorted(available, key=lambda x: x.get('response_time', 9999))
@@ -623,18 +671,18 @@ def get_recommended_config():
         "registry-mirrors": [r['mirror'] for r in recommended]
     }
     
-    return jsonify({
+    return {
         "config": config,
         "mirrors": [r['mirror'] for r in recommended],
         "count": len(recommended),
         "total_available": len(available),
         "last_update": last_update,
         "next_update": next_update
-    })
+    }
 
 
-@app.route('/api/config/update', methods=['POST'])
-def update_docker_config_manual():
+@app.post("/api/config/update")
+async def update_docker_config_manual():
     """手动触发更新 Docker 配置"""
     try:
         # 获取最新的检测结果
@@ -655,47 +703,40 @@ def update_docker_config_manual():
             }
         
         if not test_result.get("results"):
-            return jsonify({
-                "error": "暂无检测数据，请先执行检测",
-                "success": False
-            }), 400
+            raise HTTPException(status_code=400, detail="暂无检测数据，请先执行检测")
         
         # 执行自动更新
         auto_update_docker_config(test_result)
         
-        return jsonify({
+        return {
             "success": True,
             "message": "Docker 配置已更新",
             "config_path": DOCKER_DAEMON_JSON
-        })
+        }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/history', methods=['GET'])
-def get_history():
+@app.get("/api/history")
+async def get_history(mirror: str = None, limit: int = 100):
     """获取历史检测记录"""
-    mirror_url = request.args.get('mirror')
-    limit = int(request.args.get('limit', 100))
-    
     conn = get_mysql_connection()
     if not conn:
-        return jsonify({"error": "数据库连接失败"}), 500
+        raise HTTPException(status_code=500, detail="数据库连接失败")
     
     try:
         with conn.cursor() as cursor:
-            if mirror_url:
+            if mirror:
                 sql = """
                     SELECT * FROM mirror_test_history 
                     WHERE mirror_url = %s 
                     ORDER BY test_time DESC 
                     LIMIT %s
                 """
-                cursor.execute(sql, (mirror_url, limit))
+                cursor.execute(sql, (mirror, limit))
             else:
                 sql = """
                     SELECT * FROM mirror_test_history 
@@ -713,19 +754,19 @@ def get_history():
                 if r.get('created_at'):
                     r['created_at'] = r['created_at'].strftime('%Y-%m-%d %H:%M:%S')
             
-            return jsonify({"history": results})
+            return {"history": results}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
 
 
-@app.route('/api/statistics', methods=['GET'])
-def get_statistics():
+@app.get("/api/statistics")
+async def get_statistics():
     """获取镜像源统计信息"""
     conn = get_mysql_connection()
     if not conn:
-        return jsonify({"error": "数据库连接失败"}), 500
+        raise HTTPException(status_code=500, detail="数据库连接失败")
     
     try:
         with conn.cursor() as cursor:
@@ -745,59 +786,47 @@ def get_statistics():
                 if r.get('updated_at'):
                     r['updated_at'] = r['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
             
-            return jsonify({"statistics": results})
+            return {"statistics": results}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
 
 
-@app.route('/api/test/batch', methods=['POST'])
-def test_batch():
+@app.post("/api/test/batch")
+async def test_batch(request: Request):
     """批量测试镜像站（带进度）"""
-    data = request.get_json()
+    data = await request.json()
     mirrors = data.get('mirrors', DEFAULT_MIRRORS)
     
     if not isinstance(mirrors, list):
-        return jsonify({"error": "mirrors 必须是列表"}), 400
+        raise HTTPException(status_code=400, detail="mirrors 必须是列表")
     
-    results = []
-    completed = 0
-    
-    for mirror in mirrors:
-        result = test_mirror_detailed(mirror)
-        results.append(result)
-        completed += 1
+    async def event_generator():
+        results = []
+        completed = 0
         
-        # 返回进度（流式响应）
-        yield f"data: {json.dumps({'progress': completed, 'total': len(mirrors), 'result': result})}\n\n"
+        for mirror in mirrors:
+            result = test_mirror_detailed(mirror)
+            results.append(result)
+            completed += 1
+            
+            # 返回进度（流式响应）
+            yield f"data: {json.dumps({'progress': completed, 'total': len(mirrors), 'result': result}, ensure_ascii=False)}\n\n"
+        
+        # 最终结果
+        results.sort(key=lambda x: (not x['available'], x['response_time']))
+        yield f"data: {json.dumps({'done': True, 'results': results, 'total': len(results), 'available': sum(1 for r in results if r['available']), 'unavailable': sum(1 for r in results if not r['available'])}, ensure_ascii=False)}\n\n"
     
-    # 最终结果
-    results.sort(key=lambda x: (not x['available'], x['response_time']))
-    yield f"data: {json.dumps({'done': True, 'results': results, 'total': len(results), 'available': sum(1 for r in results if r['available']), 'unavailable': sum(1 for r in results if not r['available'])})}\n\n"
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@app.route('/api/health', methods=['GET'])
-def health():
+@app.get("/api/health")
+async def health():
     """健康检查"""
-    return jsonify({"status": "ok"})
+    return {"status": "ok"}
 
 
 if __name__ == '__main__':
-    # 初始化 Redis
-    print("初始化 Redis 连接...")
-    init_redis()
-    
-    # 尝试从 Redis 加载缓存
-    cached_data = get_from_redis()
-    if cached_data:
-        test_results_cache.update(cached_data)
-        print("从 Redis 加载缓存数据成功")
-    
-    # 启动定时测试任务
-    print("启动定时检测任务（每1小时检测一次）...")
-    start_scheduled_test()
-    
-    # 启动 Flask 应用
-    app.run(host='0.0.0.0', port=5000, debug=False)
-
+    import uvicorn
+    uvicorn.run(app, host='0.0.0.0', port=5000)

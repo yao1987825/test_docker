@@ -2,7 +2,7 @@
 
 # Docker 镜像加速器测试网站启动脚本
 
-echo "🐳 Docker 镜像加速器测试网站"
+echo "🐳 Docker 镜像加速器测试网站 (FastAPI)"
 echo "================================"
 echo ""
 
@@ -42,10 +42,10 @@ echo ""
 echo "✅ 服务已启动！"
 echo ""
 echo "🌐 访问地址: http://localhost:5000"
+echo "📖 API 文档: http://localhost:5000/docs"
 echo ""
 echo "📋 常用命令:"
 echo "  查看日志: docker-compose logs -f"
 echo "  停止服务: docker-compose down"
 echo "  重启服务: docker-compose restart"
 echo ""
-
