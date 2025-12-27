@@ -46,6 +46,9 @@ DOCKER_DAEMON_JSON = os.getenv('DOCKER_DAEMON_JSON', '/etc/docker/daemon.json')
 DOCKER_DAEMON_JSON_BACKUP = os.getenv('DOCKER_DAEMON_JSON_BACKUP', '/etc/docker/daemon.json.bak')
 AUTO_UPDATE_DOCKER_CONFIG = os.getenv('AUTO_UPDATE_DOCKER_CONFIG', 'true').lower() == 'true'
 
+# 镜像源配置文件路径
+MIRRORS_CONFIG_FILE = os.getenv('MIRRORS_CONFIG_FILE', '/app/mirrors.json')
+
 # Redis 连接池
 redis_pool = None
 redis_client = None
@@ -70,8 +73,8 @@ def get_mysql_connection():
         print(f"MySQL 连接失败: {e}")
         return None
 
-# 默认镜像站列表
-DEFAULT_MIRRORS = [
+# 默认镜像站列表（当配置文件不存在时使用）
+FALLBACK_MIRRORS = [
     "https://docker.1ms.run",
     "https://docker.1panel.live",
     "https://docker.m.ixdev.cn",
@@ -92,6 +95,35 @@ DEFAULT_MIRRORS = [
     "https://docker.mirrors.ustc.edu.cn",
     "https://docker.nju.edu.cn"
 ]
+
+
+def load_mirrors_from_config() -> List[str]:
+    """
+    从配置文件加载镜像源列表
+    如果配置文件不存在或读取失败，使用默认列表
+    """
+    try:
+        if os.path.exists(MIRRORS_CONFIG_FILE):
+            with open(MIRRORS_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                mirrors = json.load(f)
+                if isinstance(mirrors, list) and len(mirrors) > 0:
+                    print(f"从配置文件加载镜像源: {MIRRORS_CONFIG_FILE}")
+                    print(f"共加载 {len(mirrors)} 个镜像源")
+                    return mirrors
+                else:
+                    print(f"配置文件格式错误，使用默认镜像源列表")
+        else:
+            print(f"配置文件不存在: {MIRRORS_CONFIG_FILE}")
+            print(f"使用默认镜像源列表")
+    except Exception as e:
+        print(f"读取配置文件失败: {e}")
+        print(f"使用默认镜像源列表")
+    
+    return FALLBACK_MIRRORS
+
+
+# 加载镜像源列表
+DEFAULT_MIRRORS = load_mirrors_from_config()
 
 # 测试结果缓存
 test_results_cache: Dict = {

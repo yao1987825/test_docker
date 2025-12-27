@@ -17,6 +17,8 @@ services:
       - AUTO_UPDATE_DOCKER_CONFIG=true
       - DOCKER_DAEMON_JSON=/etc/docker/daemon.json
     volumes:
+      # 挂载镜像源配置文件
+      - ./mirrors.json:/app/mirrors.json:ro
       # 挂载宿主机的 /etc/docker 目录，允许自动更新配置
       - /etc/docker:/etc/docker:rw
       # 可选：如果需要重启 Docker 服务，需要挂载 Docker socket（需要谨慎使用）

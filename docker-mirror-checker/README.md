@@ -43,14 +43,21 @@ docker-compose down
 
 ## 配置镜像站列表
 
-要修改测试的镜像站列表，编辑 `app.py` 文件中的 `DEFAULT_MIRRORS` 列表：
+要添加或修改镜像源，只需编辑项目根目录下的 `mirrors.json` 文件：
 
-```python
-DEFAULT_MIRRORS = [
+```json
+[
     "https://docker.1ms.run",
     "https://docker.1panel.live",
-    # ... 添加更多镜像站
+    "https://your-new-mirror.com",
+    // ... 添加更多镜像源
 ]
+```
+
+**注意**：修改 `mirrors.json` 后，需要重启服务才能生效：
+
+```bash
+docker-compose restart web
 ```
 
 ## 项目结构
@@ -58,6 +65,7 @@ DEFAULT_MIRRORS = [
 ```
 docker-mirror-checker/
 ├── app.py                 # Flask 后端应用
+├── mirrors.json          # 镜像源配置文件（修改此文件添加镜像源）
 ├── templates/
 │   └── index.html        # 前端界面
 ├── requirements.txt      # Python 依赖
