@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker 镜像加速器测试工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            flex: 1;
+            min-width: 150px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .results {
+            display: grid;
+            gap: 15px;
+        }
+
+        .result-item {
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid;
+            background: #f8f9fa;
+            transition: all 0.3s;
+        }
+
+        .result-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .result-item.available {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+
+        .result-item.unavailable {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .result-url {
+            font-weight: 600;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .result-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .result-status.available {
+            background: #28a745;
+            color: white;
+        }
+
+        .result-status.unavailable {
+            background: #dc3545;
+            color: white;
+        }
+
+        .result-details {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+            color: #666;
+            flex-wrap: wrap;
+        }
+
+        .result-detail {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .mirror-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 15px;
+            font-family: monospace;
+        }
+
+        .mirror-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .guide-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .guide-section h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .guide-section h3 {
+            color: #555;
+            font-size: 16px;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+
+        .guide-section ul {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        .guide-section li {
+            margin-bottom: 8px;
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 10px 0;
+            line-height: 1.5;
+        }
+
+        .code-block code {
+            color: #f8f8f2;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+        }
+
+        .recommended-config {
+            background: #d1ecf1;
+            border: 2px solid #17a2b8;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .recommended-config h3 {
+            color: #0c5460;
+            margin-bottom: 10px;
+        }
+
+        .recommended-config pre {
+            background: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+
+        .copy-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .copy-btn:hover {
+            background: #138496;
+        }
+
+        .tips {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 13px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐳 Docker 镜像加速器测试工具</h1>
+        <p class="subtitle">检测镜像加速器是否可用，自动测试响应时间和状态</p>
+
+        <!-- 指南区域 -->
+        <div class="guide-section">
+            <h2>📖 使用指南</h2>
+            
+            <h3>如何验证配置是否生效</h3>
+            <p style="color: #666; margin-bottom: 10px;">配置完成后，运行以下命令检查 Docker 配置：</p>
+            <div class="code-block">
+<code>docker info | grep -i registry</code>
+            </div>
+            <p style="color: #666; margin-bottom: 10px;">如果看到配置的镜像源地址，说明配置成功。然后可以测试拉取镜像：</p>
+            <div class="code-block">
+<code>docker pull library/alpine:latest</code>
+            </div>
+
+            <h3>如何选择最佳镜像源</h3>
+            <ul>
+                <li><strong>查看监控状态：</strong>在首页查看各个镜像源的实时状态</li>
+                <li><strong>优先选择在线状态：</strong>选择状态为 <span style="color: #28a745; font-weight: bold;">可用</span> 的镜像源</li>
+                <li><strong>避免离线源：</strong>避免使用状态为 <span style="color: #dc3545; font-weight: bold;">不可用</span> 的镜像源</li>
+                <li><strong>响应时间考虑：</strong>优先选择响应时间较短的镜像源（通常 < 500ms）</li>
+                <li><strong>多源配置：</strong>建议配置 3-5 个镜像源作为备选，Docker 会自动选择最快的</li>
+            </ul>
+
+            <div class="tips">
+                💡 <strong>提示：</strong>系统每 1 小时自动检测一次各个镜像源的状态，确保数据准确性，同时避免对镜像源造成过大压力。页面加载时会自动从监控数据中获取当前在线的镜像源，并更新 Docker 的配置示例，确保您获得最新可用的镜像源配置。点击"刷新状态"可手动更新。
+            </div>
+
+            <!-- 自动更新的配置示例 -->
+            <div id="autoConfigSection" style="margin-top: 20px; display: none; background: #e7f3ff; padding: 15px; border-radius: 6px; border-left: 4px solid #17a2b8;">
+                <h3 style="color: #0c5460; margin-bottom: 10px;">🔄 最新可用配置（自动更新）</h3>
+                <p style="color: #004085; margin-bottom: 10px; font-size: 13px;">
+                    以下是根据当前测试结果自动生成的最新配置，包含响应时间最快的可用镜像源：
+                </p>
+                <div class="code-block" id="autoConfigCode" style="background: #2d2d2d; color: #f8f8f2; border: 1px solid #dee2e6;">
+                    <code id="autoConfigContent" style="color: #f8f8f2;">正在检测中...</code>
+                </div>
+                <button class="copy-btn" onclick="copyAutoConfig()" id="copyAutoConfigBtn" style="display: none; margin-top: 10px;">📋 复制配置</button>
+                <p style="color: #004085; margin-top: 10px; font-size: 12px;">
+                    <span id="configUpdateTime"></span>
+                </p>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" onclick="refreshResults()">🔄 刷新状态</button>
+            <button class="btn-info" onclick="showRecommendedConfig()">推荐配置</button>
+            <button class="btn-success" onclick="exportResults()">导出结果</button>
+        </div>
+
+        <div id="recommendedConfig" class="recommended-config"></div>
+
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="stats" id="stats" style="display: flex;">
+            <div class="stat-card">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">总计</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statAvailable" style="color: #28a745;">0</div>
+                <div class="stat-label">可用</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statUnavailable" style="color: #dc3545;">0</div>
+                <div class="stat-label">不可用</div>
+            </div>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let currentResults = [];
+
+        // 默认镜像站列表
+        const defaultMirrors = [
+            "https://docker.1ms.run",
+            "https://docker.1panel.live",
+            "https://docker.m.ixdev.cn",
+            "https://hub.rat.dev",
+            "https://docker.xuanyuan.me",
+            "https://dockerproxy.net",
+            "https://docker.hlmirror.com",
+            "https://hub1.nat.tf",
+            "https://hub2.nat.tf",
+            "https://hub3.nat.tf",
+            "https://hub4.nat.tf",
+            "https://docker.m.daocloud.io",
+            "https://docker.kejilion.pro",
+            "https://hub.1panel.dev",
+            "https://dockerproxy.cool",
+            "https://proxy.vvvv.ee",
+            "https://dockerproxy.com",
+            "https://docker.mirrors.ustc.edu.cn",
+            "https://docker.nju.edu.cn"
+        ];
+
+        async function refreshResults() {
+            const resultsDiv = document.getElementById('results');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const statsDiv = document.getElementById('stats');
+
+            // 显示加载状态
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div>正在刷新镜像站状态...</div>';
+            progressBar.style.display = 'block';
+            progressFill.style.width = '0%';
+            statsDiv.style.display = 'none';
+
+            // 禁用按钮
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+
+            try {
+                // 先更新配置（从 API 获取最新）
+                await updateAutoConfigFromAPI();
+                
+                // 先尝试获取缓存
+                const cachedData = await getCachedResults();
+                
+                if (cachedData && cachedData.results && cachedData.results.length > 0) {
+                    // 使用缓存结果
+                    currentResults = cachedData.results;
+                    
+                    // 显示统计
+                    updateStats({
+                        total: cachedData.total,
+                        available: cachedData.available,
+                        unavailable: cachedData.unavailable
+                    });
+                    
+                    // 显示结果
+                    displayResults(currentResults);
+                } else {
+                    // 没有缓存，执行实时测试
+                    const response = await fetch(`${API_BASE}/api/test/all`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            mirrors: defaultMirrors
+                        })
+                    });
+
+                    const data = await response.json();
+                    currentResults = data.results || [];
+
+                    // 显示统计
+                    updateStats(data);
+
+                    // 显示结果
+                    displayResults(currentResults);
+
+                    // 自动更新配置示例（实时检测结果）
+                    updateAutoConfig(currentResults);
+                }
+
+                // 更新进度
+                progressFill.style.width = '100%';
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="loading" style="color: #dc3545;">刷新失败: ${error.message}</div>`;
+            } finally {
+                // 恢复按钮
+                buttons.forEach(btn => btn.disabled = false);
+                setTimeout(() => {
+                    progressBar.style.display = 'none';
+                }, 500);
+            }
+        }
+
+        function updateStats(data) {
+            const statsDiv = document.getElementById('stats');
+            document.getElementById('statTotal').textContent = data.total || 0;
+            document.getElementById('statAvailable').textContent = data.available || 0;
+            document.getElementById('statUnavailable').textContent = data.unavailable || 0;
+            statsDiv.style.display = 'flex';
+        }
+
+        function displayResults(results) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (results.length === 0) {
+                resultsDiv.innerHTML = '<div class="loading">没有测试结果</div>';
+                return;
+            }
+
+            let html = '<div class="results">';
+            
+            results.forEach(result => {
+                const statusClass = result.available ? 'available' : 'unavailable';
+                const statusText = result.available ? '✓ 可用' : '✗ 不可用';
+                const statusCode = result.status_code || 'N/A';
+                const responseTime = result.response_time || 0;
+                const testTime = result.test_time || '';
+
+                html += `
+                    <div class="result-item ${statusClass}">
+                        <div class="result-header">
+                            <div class="result-url">${result.mirror}</div>
+                            <div class="result-status ${statusClass}">${statusText}</div>
+                        </div>
+                        <div class="result-details">
+                            <div class="result-detail">
+                                <strong>状态:</strong> ${result.status}
+                            </div>
+                            <div class="result-detail">
+                                <strong>HTTP:</strong> ${statusCode}
+                            </div>
+                            <div class="result-detail">
+                                <strong>响应时间:</strong> ${responseTime}ms
+                            </div>
+                            <div class="result-detail">
+                                <strong>测试时间:</strong> ${testTime}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        }
+
+        // 移除 clearResults 函数，不再需要
+
+        function showRecommendedConfig() {
+            if (currentResults.length === 0) {
+                alert('请先进行测试，获取测试结果后再查看推荐配置');
+                return;
+            }
+
+            const available = currentResults.filter(r => r.available);
+            
+            if (available.length === 0) {
+                alert('没有可用的镜像源，无法生成推荐配置');
+                return;
+            }
+
+            // 按响应时间排序，选择最快的 3-5 个
+            const sorted = available.sort((a, b) => a.response_time - b.response_time);
+            const recommended = sorted.slice(0, Math.min(5, sorted.length));
+
+            const config = {
+                "registry-mirrors": recommended.map(r => r.mirror)
+            };
+
+            const configDiv = document.getElementById('recommendedConfig');
+            configDiv.style.display = 'block';
+            configDiv.innerHTML = `
+                <h3>✨ 推荐配置（响应时间最快的 ${recommended.length} 个镜像源）</h3>
+                <p style="color: #666; margin-bottom: 10px; font-size: 13px;">
+                    以下是根据测试结果推荐的镜像源配置，按响应时间从快到慢排序：
+                </p>
+                <div style="margin-bottom: 10px;">
+                    ${recommended.map((r, i) => 
+                        `<div style="padding: 5px 0; color: #555; font-size: 13px;">
+                            ${i + 1}. ${r.mirror} <span style="color: #28a745;">(${r.response_time}ms)</span>
+                        </div>`
+                    ).join('')}
+                </div>
+                <p style="color: #666; margin-bottom: 10px; font-size: 13px;"><strong>配置内容 (daemon.json):</strong></p>
+                <pre>${JSON.stringify(config, null, 2)}</pre>
+                <button class="copy-btn" onclick="copyConfig()">📋 复制配置</button>
+                <div style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 4px; font-size: 12px; color: #004085;">
+                    <strong>配置步骤：</strong><br>
+                    1. 复制上面的配置内容<br>
+                    2. 编辑 <code>/etc/docker/daemon.json</code> 文件（如果不存在则创建）<br>
+                    3. 将配置内容粘贴到文件中<br>
+                    4. 运行 <code>sudo systemctl daemon-reload</code><br>
+                    5. 运行 <code>sudo systemctl restart docker</code><br>
+                    6. 运行 <code>docker info | grep -i registry</code> 验证配置
+                </div>
+            `;
+
+            // 滚动到推荐配置区域
+            configDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function copyConfig() {
+            const available = currentResults.filter(r => r.available);
+            const sorted = available.sort((a, b) => a.response_time - b.response_time);
+            const recommended = sorted.slice(0, Math.min(5, sorted.length));
+            
+            const config = {
+                "registry-mirrors": recommended.map(r => r.mirror)
+            };
+            
+            const configText = JSON.stringify(config, null, 2);
+            
+            navigator.clipboard.writeText(configText).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✓ 已复制';
+                btn.style.background = '#28a745';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '#17a2b8';
+                }, 2000);
+            }).catch(err => {
+                alert('复制失败，请手动复制配置内容');
+            });
+        }
+
+        function exportResults() {
+            if (currentResults.length === 0) {
+                alert('没有可导出的结果，请先进行测试');
+                return;
+            }
+
+            const available = currentResults.filter(r => r.available);
+            const unavailable = currentResults.filter(r => !r.available);
+
+            let text = '=== Docker 镜像加速器测试结果 ===\n\n';
+            text += `测试时间: ${new Date().toLocaleString('zh-CN')}\n`;
+            text += `总计: ${currentResults.length} | 可用: ${available.length} | 不可用: ${unavailable.length}\n\n`;
+
+            text += '=== 可用的镜像站 ===\n';
+            available.forEach(r => {
+                text += `${r.mirror} (${r.status}, ${r.response_time}ms)\n`;
+            });
+
+            text += '\n=== 不可用的镜像站 ===\n';
+            unavailable.forEach(r => {
+                text += `${r.mirror} (${r.status})\n`;
+            });
+
+            // 生成可用的配置 JSON
+            text += '\n=== 可用的配置 (daemon.json) ===\n';
+            const config = {
+                "registry-mirrors": available.map(r => r.mirror)
+            };
+            text += JSON.stringify(config, null, 2);
+
+            // 生成推荐配置
+            const sorted = available.sort((a, b) => a.response_time - b.response_time);
+            const recommended = sorted.slice(0, Math.min(5, sorted.length));
+            text += '\n\n=== 推荐配置（响应时间最快的 ' + recommended.length + ' 个）===\n';
+            const recommendedConfig = {
+                "registry-mirrors": recommended.map(r => r.mirror)
+            };
+            text += JSON.stringify(recommendedConfig, null, 2);
+
+            text += '\n\n=== 配置步骤 ===\n';
+            text += '1. 编辑 /etc/docker/daemon.json 文件（如果不存在则创建）\n';
+            text += '2. 将配置内容粘贴到文件中\n';
+            text += '3. 运行: sudo systemctl daemon-reload\n';
+            text += '4. 运行: sudo systemctl restart docker\n';
+            text += '5. 验证配置: docker info | grep -i registry\n';
+            text += '6. 测试拉取: docker pull library/alpine:latest\n';
+
+            // 下载文件
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `docker-mirrors-test-${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function updateAutoConfigFromAPI() {
+            try {
+                const response = await fetch(`${API_BASE}/api/config/recommended`);
+                const data = await response.json();
+                
+                if (data.config) {
+                    const configText = JSON.stringify(data.config, null, 2);
+                    document.getElementById('autoConfigContent').textContent = configText;
+                    document.getElementById('autoConfigSection').style.display = 'block';
+                    document.getElementById('copyAutoConfigBtn').style.display = 'inline-block';
+                    
+                    let updateInfo = `最后检测: <strong>${data.last_update || '未知'}</strong>`;
+                    if (data.next_update) {
+                        updateInfo += ` | 下次检测: <strong>${data.next_update}</strong>`;
+                    }
+                    updateInfo += ` | 可用镜像源: <strong>${data.total_available}</strong> 个 | 推荐使用: <strong>${data.count}</strong> 个`;
+                    updateInfo += ` | 数据来源: 定时检测（自动更新）`;
+                    document.getElementById('configUpdateTime').innerHTML = updateInfo;
+                } else {
+                    document.getElementById('autoConfigContent').textContent = data.error || '暂无可用的镜像源';
+                    document.getElementById('autoConfigSection').style.display = 'block';
+                    document.getElementById('copyAutoConfigBtn').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('获取推荐配置失败:', error);
+            }
+        }
+
+        function updateAutoConfig(results) {
+            const available = results.filter(r => r.available);
+            
+            if (available.length === 0) {
+                document.getElementById('autoConfigContent').textContent = '暂无可用的镜像源';
+                document.getElementById('autoConfigSection').style.display = 'block';
+                document.getElementById('copyAutoConfigBtn').style.display = 'none';
+                document.getElementById('configUpdateTime').textContent = '最后更新: ' + new Date().toLocaleString('zh-CN') + ' | 未找到可用的镜像源';
+                return;
+            }
+
+            // 按响应时间排序，选择最快的 5 个
+            const sorted = available.sort((a, b) => a.response_time - b.response_time);
+            const recommended = sorted.slice(0, Math.min(5, sorted.length));
+
+            const config = {
+                "registry-mirrors": recommended.map(r => r.mirror)
+            };
+
+            const configText = JSON.stringify(config, null, 2);
+            document.getElementById('autoConfigContent').textContent = configText;
+            document.getElementById('autoConfigSection').style.display = 'block';
+            document.getElementById('copyAutoConfigBtn').style.display = 'inline-block';
+            
+            const updateTime = new Date().toLocaleString('zh-CN');
+            const avgResponseTime = Math.round(recommended.reduce((sum, r) => sum + r.response_time, 0) / recommended.length);
+            
+            // 检查是否已有更新信息（来自缓存），如果没有则更新
+            const existingInfo = document.getElementById('configUpdateTime').textContent;
+            if (!existingInfo || existingInfo.includes('正在') || existingInfo.includes('检测中')) {
+                document.getElementById('configUpdateTime').innerHTML = 
+                    `最后更新: <strong>${updateTime}</strong> | 可用镜像源: <strong>${available.length}</strong> 个 | 推荐使用: <strong>${recommended.length}</strong> 个（平均响应时间: <strong>${avgResponseTime}ms</strong>） | 数据来源: 实时检测`;
+            }
+        }
+
+        function copyAutoConfig() {
+            const configContent = document.getElementById('autoConfigContent').textContent;
+            
+            if (configContent === '正在检测中...' || configContent === '暂无可用的镜像源') {
+                alert('暂无配置可复制，请等待测试完成');
+                return;
+            }
+            
+            navigator.clipboard.writeText(configContent).then(() => {
+                const btn = document.getElementById('copyAutoConfigBtn');
+                const originalText = btn.textContent;
+                btn.textContent = '✓ 已复制';
+                btn.style.background = '#28a745';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '#17a2b8';
+                }, 2000);
+            }).catch(err => {
+                alert('复制失败，请手动复制配置内容');
+            });
+        }
+
+        // 获取缓存的测试结果
+        async function getCachedResults() {
+            try {
+                const response = await fetch(`${API_BASE}/api/test/cached`);
+                const data = await response.json();
+                
+                // 检查是否有缓存数据
+                if (data.results && data.results.length > 0) {
+                    return data;
+                }
+            } catch (error) {
+                console.log('获取缓存失败，将执行实时测试:', error);
+            }
+            return null;
+        }
+
+        // 页面加载时自动显示状态
+        window.addEventListener('load', async () => {
+            // 显示加载提示
+            const autoConfigSection = document.getElementById('autoConfigSection');
+            autoConfigSection.style.display = 'block';
+            document.getElementById('autoConfigContent').textContent = '正在从监控数据中获取最新配置...';
+            document.getElementById('configUpdateTime').textContent = '正在从监控数据中获取最新状态...';
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div>正在加载镜像源状态...</div>';
+            
+            // 先尝试从 API 获取推荐配置（自动更新）
+            await updateAutoConfigFromAPI();
+            
+            // 先尝试获取缓存结果
+            const cachedData = await getCachedResults();
+            
+            if (cachedData && cachedData.results && cachedData.results.length > 0) {
+                // 使用缓存结果
+                currentResults = cachedData.results;
+                
+                // 显示统计
+                updateStats({
+                    total: cachedData.total,
+                    available: cachedData.available,
+                    unavailable: cachedData.unavailable
+                });
+                
+                // 显示结果
+                displayResults(currentResults);
+            } else {
+                // 没有缓存，执行实时测试
+                document.getElementById('configUpdateTime').textContent = '正在执行实时检测...';
+                resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div>正在执行实时检测...</div>';
+                
+                try {
+                    const response = await fetch(`${API_BASE}/api/test/all`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            mirrors: defaultMirrors
+                        })
+                    });
+
+                    const data = await response.json();
+                    currentResults = data.results || [];
+
+                    // 显示统计
+                    updateStats(data);
+
+                    // 显示结果
+                    displayResults(currentResults);
+
+                    // 自动更新配置示例
+                    updateAutoConfig(currentResults);
+                } catch (error) {
+                    resultsDiv.innerHTML = `<div class="loading" style="color: #dc3545;">检测失败: ${error.message}</div>`;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+

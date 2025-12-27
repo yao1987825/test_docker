@@ -1,0 +1,65 @@
+services:
+  web:
+    build: .
+    container_name: docker-mirror-checker
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=production
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=mirror_checker
+      - MYSQL_PASSWORD=mirror_checker_pass
+      - MYSQL_DATABASE=mirror_checker
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUTO_UPDATE_DOCKER_CONFIG=true
+      - DOCKER_DAEMON_JSON=/etc/docker/daemon.json
+    volumes:
+      # 挂载宿主机的 /etc/docker 目录，允许自动更新配置
+      - /etc/docker:/etc/docker:rw
+      # 可选：如果需要重启 Docker 服务，需要挂载 Docker socket（需要谨慎使用）
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - mirror-checker-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: docker-mirror-checker-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_DATABASE=mirror_checker
+      - MYSQL_USER=mirror_checker
+      - MYSQL_PASSWORD=mirror_checker_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    networks:
+      - mirror-checker-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: docker-mirror-checker-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"  # 使用6380端口避免冲突
+    volumes:
+      - redis_data:/data
+    networks:
+      - mirror-checker-network
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  mirror-checker-network:
+    driver: bridge
+
