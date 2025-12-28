@@ -39,3 +39,6 @@ CREATE TABLE IF NOT EXISTS test_batches (
     INDEX idx_batch_time (batch_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+
+
+

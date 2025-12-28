@@ -24,8 +24,10 @@ services:
       # 可选：如果需要重启 Docker 服务，需要挂载 Docker socket（需要谨慎使用）
       # - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
-      - mysql
-      - redis
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mirror-checker-network
 
@@ -43,6 +45,12 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - mirror-checker-network
 
@@ -54,6 +62,12 @@ services:
       - "6380:6379"  # 使用6380端口避免冲突
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     networks:
       - mirror-checker-network
 
