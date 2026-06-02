@@ -1,15 +1,11 @@
 import json
 import urllib.request
 from datetime import datetime
+import os
 
-MIRRORS = [
-    "https://dockerproxy.com",
-    "https://docker.mirrors.ustc.edu.cn",
-    "https://docker.nju.edu.cn",
-    "https://docker.m.daocloud.io",
-    "https://mirror.baidubce.com",
-    "https://mirror.iscas.ac.cn",
-]
+mirrors_file = os.path.join(os.path.dirname(__file__), 'docker-mirror-checker', 'mirrors.json')
+with open(mirrors_file, 'r') as f:
+    MIRRORS = json.load(f)
 
 def test_mirror(mirror, timeout=5):
     test_urls = [f"{mirror}/v2/", mirror]
