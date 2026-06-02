@@ -1,0 +1,6 @@
+title: Docker Mirror Checker
+description: Docker 镜像加速器测试结果
+theme: jekyll-theme-primer
+markdown: kramdown
+safe: false
+incremental: false
